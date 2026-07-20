@@ -2,19 +2,15 @@ from dataclasses import dataclass
 
 
 def dbm_to_watt(power_dbm: float) -> float:
-    """Convert power from dBm to watt."""
     return 10 ** ((power_dbm - 30.0) / 10.0)
 
 
 def db_to_linear(value_db: float) -> float:
-    """Convert a value from dB to linear scale."""
     return 10 ** (value_db / 10.0)
 
 
 @dataclass(frozen=True)
 class SimulationConfig:
-    """Default parameters based on the paper."""
-
     num_channels: int = 8
     bandwidth_hz: float = 100e3
     num_slots: int = 100_000
@@ -32,6 +28,14 @@ class SimulationConfig:
     snr_db_start: int = 0
     snr_db_stop: int = 30
     snr_db_step: int = 5
+
+    # PA-FH update parameters
+    utility_window_size: int = 500
+    probability_update_interval: int = 100
+    initial_exploration_slots: int = 800
+
+    default_snr_db: float = 15.0
+    default_jnr_db: float = 20.0
 
     @property
     def source_power_watt(self) -> float:

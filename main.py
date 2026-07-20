@@ -1,95 +1,123 @@
 import numpy as np
 
 from config import SimulationConfig
-from utility import ChannelUtilityEstimator
+from metrics import hopping_gain
+from simulation import run_simulation
+
+
+def print_result(result) -> None:
+    print(f"\n=== {result.scheme} ===")
+
+    print(
+        "Average throughput:",
+        f"{result.average_throughput_bit_s / 1e3:.2f}",
+        "kbit/s",
+    )
+
+    print(
+        "Successful throughput:",
+        f"{result.successful_throughput_bit_s / 1e3:.2f}",
+        "kbit/s",
+    )
+
+    print(
+        "Outage probability:",
+        f"{result.outage_probability:.4f}",
+    )
+
+    print(
+        "Final probabilities:",
+        np.round(
+            result.final_probabilities,
+            4,
+        ),
+    )
+
+    print(
+        "Selection frequencies:",
+        np.round(
+            result.selection_frequencies,
+            4,
+        ),
+    )
+
+    print(
+        "Normalized entropy:",
+        f"{result.normalized_entropy:.4f}",
+    )
 
 
 def main() -> None:
     config = SimulationConfig()
 
-    estimator = ChannelUtilityEstimator(
-        num_channels=config.num_channels,
-        sinr_threshold_linear=(
-            config.sinr_threshold_linear
+    # Kênh đầu có chất lượng tốt hơn,
+    # các kênh cuối có chất lượng thấp hơn.
+    channel_quality = np.array(
+        [
+            1.40,
+            1.25,
+            1.10,
+            0.95,
+            0.80,
+            0.65,
+            0.55,
+            0.45,
+        ]
+    )
+
+    # Jammer tập trung nhiều hơn vào các kênh cuối.
+    jammer_probabilities = np.array(
+        [
+            0.05,
+            0.05,
+            0.08,
+            0.10,
+            0.15,
+            0.17,
+            0.18,
+            0.22,
+        ]
+    )
+
+    rch_result = run_simulation(
+        config=config,
+        scheme="RCH",
+        snr_db=config.default_snr_db,
+        jnr_db=config.default_jnr_db,
+        channel_quality=channel_quality,
+        jammer_probabilities=(
+            jammer_probabilities
         ),
-        window_size=5,
-        hybrid_weight=0.5,
+        random_seed=42,
     )
 
-    # Channel 0: high-quality channel
-    for sinr in [10.0, 12.0, 8.0, 15.0, 9.0]:
-        estimator.update(
-            channel=0,
-            sinr_linear=sinr,
-        )
-
-    # Channel 1: medium-quality channel
-    for sinr in [3.0, 2.5, 2.2, 1.8, 3.5]:
-        estimator.update(
-            channel=1,
-            sinr_linear=sinr,
-        )
-
-    # Channel 2: poor-quality channel
-    for sinr in [0.5, 0.7, 1.0, 0.4, 0.8]:
-        estimator.update(
-            channel=2,
-            sinr_linear=sinr,
-        )
-
-    print("=== Channel statistics ===")
-
-    print(
-        "Observation counts:",
-        estimator.observation_counts(),
-    )
-
-    print(
-        "Mean SINR:",
-        np.round(
-            estimator.mean_sinr(),
-            3,
+    pafh_result = run_simulation(
+        config=config,
+        scheme="PAFH",
+        snr_db=config.default_snr_db,
+        jnr_db=config.default_jnr_db,
+        channel_quality=channel_quality,
+        jammer_probabilities=(
+            jammer_probabilities
         ),
+        random_seed=43,
     )
 
-    print(
-        "Success rates:",
-        np.round(
-            estimator.success_rates(),
-            3,
+    print_result(rch_result)
+    print_result(pafh_result)
+
+    gain = hopping_gain(
+        pafh_throughput_bit_s=(
+            pafh_result.average_throughput_bit_s
         ),
-    )
-
-    print(
-        "Outage rates:",
-        np.round(
-            estimator.outage_rates(),
-            3,
-        ),
-    )
-
-    print(
-        "Mean-SINR utilities:",
-        np.round(
-            estimator.utilities("mean_sinr"),
-            3,
+        rch_throughput_bit_s=(
+            rch_result.average_throughput_bit_s
         ),
     )
 
     print(
-        "Success-rate utilities:",
-        np.round(
-            estimator.utilities("success_rate"),
-            3,
-        ),
-    )
-
-    print(
-        "Hybrid utilities:",
-        np.round(
-            estimator.utilities("hybrid"),
-            3,
-        ),
+        "\nPA-FH hopping gain over RCH:",
+        f"{gain:.4f}",
     )
 
 
