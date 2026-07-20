@@ -1,98 +1,119 @@
 import numpy as np
 
 from config import SimulationConfig
-from jammer import ProbabilisticJammer, ReactiveJammer
+from metrics import (
+    achievable_rate,
+    average_throughput,
+    compute_sinr,
+    hopping_gain,
+    linear_to_db,
+    outage_probability,
+    successful_throughput,
+)
 
 
 def main() -> None:
     config = SimulationConfig()
-    rng = np.random.default_rng(config.random_seed)
 
-    num_trials = 100_000
+    # Example received backscatter signal power
+    signal_power = 1e-9
 
-    # Uniform probabilistic jammer
-    q = np.ones(config.num_channels) / config.num_channels
-
-    probabilistic_jammer = ProbabilisticJammer(
-        power_watt=config.jammer_power_watt,
-        channel_probabilities=q,
+    # Case 1: no jammer
+    sinr_no_jammer = compute_sinr(
+        signal_power_watt=signal_power,
+        noise_power_watt=config.noise_power_watt,
+        interference_power_watt=0.0,
     )
 
-    selected_channel = 0
-    probabilistic_jam_count = 0
-    probabilistic_interference_sum = 0.0
+    # Case 2: jammer interference is present
+    jammer_interference = 9.9e-11
 
-    for _ in range(num_trials):
-        interference, was_jammed, jammer_channel = (
-            probabilistic_jammer.generate_interference(
-                rng=rng,
-                selected_channel=selected_channel,
-            )
-        )
-
-        if was_jammed:
-            probabilistic_jam_count += 1
-            probabilistic_interference_sum += interference
-
-    probabilistic_hit_rate = (
-        probabilistic_jam_count / num_trials
+    sinr_with_jammer = compute_sinr(
+        signal_power_watt=signal_power,
+        noise_power_watt=config.noise_power_watt,
+        interference_power_watt=jammer_interference,
     )
 
-    print("=== Probabilistic jammer ===")
+    rate_no_jammer = achievable_rate(
+        sinr_linear=sinr_no_jammer,
+        bandwidth_hz=config.bandwidth_hz,
+    )
+
+    rate_with_jammer = achievable_rate(
+        sinr_linear=sinr_with_jammer,
+        bandwidth_hz=config.bandwidth_hz,
+    )
+
+    print("=== Single-slot metrics ===")
     print(
-        "Expected hit probability:",
-        f"{1 / config.num_channels:.4f}",
-    )
-    print(
-        "Simulated hit probability:",
-        f"{probabilistic_hit_rate:.4f}",
-    )
-
-    if probabilistic_jam_count > 0:
-        print(
-            "Mean interference when jammed:",
-            f"{probabilistic_interference_sum / probabilistic_jam_count:.4e} W",
-        )
-
-    print()
-
-    # Reactive jammer
-    detection_probability = 0.7
-
-    reactive_jammer = ReactiveJammer(
-        power_watt=config.jammer_power_watt,
-        detection_probability=detection_probability,
-    )
-
-    reactive_jam_count = 0
-    reactive_interference_sum = 0.0
-
-    for _ in range(num_trials):
-        interference, was_jammed = (
-            reactive_jammer.generate_interference(rng)
-        )
-
-        if was_jammed:
-            reactive_jam_count += 1
-            reactive_interference_sum += interference
-
-    reactive_hit_rate = reactive_jam_count / num_trials
-
-    print("=== Reactive jammer ===")
-    print(
-        "Expected detection probability:",
-        f"{detection_probability:.4f}",
+        "SINR without jammer:",
+        f"{sinr_no_jammer:.4f}",
+        f"({linear_to_db(sinr_no_jammer):.2f} dB)",
     )
     print(
-        "Simulated detection probability:",
-        f"{reactive_hit_rate:.4f}",
+        "SINR with jammer:",
+        f"{sinr_with_jammer:.4f}",
+        f"({linear_to_db(sinr_with_jammer):.2f} dB)",
+    )
+    print(
+        "Rate without jammer:",
+        f"{rate_no_jammer / 1e3:.2f} kbit/s",
+    )
+    print(
+        "Rate with jammer:",
+        f"{rate_with_jammer / 1e3:.2f} kbit/s",
     )
 
-    if reactive_jam_count > 0:
-        print(
-            "Mean interference when jammed:",
-            f"{reactive_interference_sum / reactive_jam_count:.4e} W",
-        )
+    # Monte Carlo-like sample validation
+    sinr_samples = np.array(
+        [10.0, 4.0, 2.5, 1.5, 1.0, 0.5]
+    )
+
+    rate_samples = achievable_rate(
+        sinr_linear=sinr_samples,
+        bandwidth_hz=config.bandwidth_hz,
+    )
+
+    outage = outage_probability(
+        sinr_samples=sinr_samples,
+        sinr_threshold_linear=config.sinr_threshold_linear,
+    )
+
+    mean_throughput = average_throughput(rate_samples)
+
+    goodput = successful_throughput(
+        sinr_samples=sinr_samples,
+        bandwidth_hz=config.bandwidth_hz,
+        sinr_threshold_linear=config.sinr_threshold_linear,
+    )
+
+    print("\n=== Multiple-slot metrics ===")
+    print(
+        "SINR threshold:",
+        f"{config.sinr_threshold_db:.2f} dB",
+    )
+    print(
+        "Outage probability:",
+        f"{outage:.4f}",
+    )
+    print(
+        "Average throughput:",
+        f"{mean_throughput / 1e3:.2f} kbit/s",
+    )
+    print(
+        "Successful throughput:",
+        f"{goodput / 1e3:.2f} kbit/s",
+    )
+
+    example_gain = hopping_gain(
+        pafh_throughput_bit_s=454e3,
+        rch_throughput_bit_s=409e3,
+    )
+
+    print(
+        "Example hopping gain:",
+        f"{example_gain:.4f}",
+    )
 
 
 if __name__ == "__main__":
