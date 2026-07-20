@@ -1,57 +1,23 @@
+from dataclasses import replace
+
 import numpy as np
 
 from config import SimulationConfig
-from metrics import hopping_gain
-from simulation import run_simulation
-
-
-def print_result(result) -> None:
-    print(f"\n=== {result.scheme} ===")
-
-    print(
-        "Average throughput:",
-        f"{result.average_throughput_bit_s / 1e3:.2f}",
-        "kbit/s",
-    )
-
-    print(
-        "Successful throughput:",
-        f"{result.successful_throughput_bit_s / 1e3:.2f}",
-        "kbit/s",
-    )
-
-    print(
-        "Outage probability:",
-        f"{result.outage_probability:.4f}",
-    )
-
-    print(
-        "Final probabilities:",
-        np.round(
-            result.final_probabilities,
-            4,
-        ),
-    )
-
-    print(
-        "Selection frequencies:",
-        np.round(
-            result.selection_frequencies,
-            4,
-        ),
-    )
-
-    print(
-        "Normalized entropy:",
-        f"{result.normalized_entropy:.4f}",
-    )
+from experiments_beta import (
+    run_beta_sweep,
+    save_beta_sweep,
+)
 
 
 def main() -> None:
-    config = SimulationConfig()
+    base_config = SimulationConfig()
 
-    # Kênh đầu có chất lượng tốt hơn,
-    # các kênh cuối có chất lượng thấp hơn.
+    # Cấu hình debug để chạy nhanh.
+    config = replace(
+        base_config,
+        num_slots=100_000,
+    )
+
     channel_quality = np.array(
         [
             1.40,
@@ -65,7 +31,6 @@ def main() -> None:
         ]
     )
 
-    # Jammer tập trung nhiều hơn vào các kênh cuối.
     jammer_probabilities = np.array(
         [
             0.05,
@@ -79,46 +44,30 @@ def main() -> None:
         ]
     )
 
-    rch_result = run_simulation(
-        config=config,
-        scheme="RCH",
-        snr_db=config.default_snr_db,
-        jnr_db=config.default_jnr_db,
+    beta_values = np.array(
+        [
+            0.0,
+            0.5,
+            1.0,
+            2.0,
+            3.0,
+            5.0,
+            8.0,
+            12.0,
+        ]
+    )
+
+    result = run_beta_sweep(
+        base_config=config,
+        beta_values=beta_values,
         channel_quality=channel_quality,
         jammer_probabilities=(
             jammer_probabilities
         ),
-        random_seed=42,
+        repetitions=10,
     )
 
-    pafh_result = run_simulation(
-        config=config,
-        scheme="PAFH",
-        snr_db=config.default_snr_db,
-        jnr_db=config.default_jnr_db,
-        channel_quality=channel_quality,
-        jammer_probabilities=(
-            jammer_probabilities
-        ),
-        random_seed=43,
-    )
-
-    print_result(rch_result)
-    print_result(pafh_result)
-
-    gain = hopping_gain(
-        pafh_throughput_bit_s=(
-            pafh_result.average_throughput_bit_s
-        ),
-        rch_throughput_bit_s=(
-            rch_result.average_throughput_bit_s
-        ),
-    )
-
-    print(
-        "\nPA-FH hopping gain over RCH:",
-        f"{gain:.4f}",
-    )
+    save_beta_sweep(result)
 
 
 if __name__ == "__main__":
