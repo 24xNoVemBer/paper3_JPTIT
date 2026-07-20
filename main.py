@@ -1,54 +1,98 @@
 import numpy as np
 
-from channel import (
-    path_loss,
-    sample_dyadic_backscatter_power,
-    sample_rayleigh_power,
-)
 from config import SimulationConfig
+from jammer import ProbabilisticJammer, ReactiveJammer
 
 
 def main() -> None:
     config = SimulationConfig()
     rng = np.random.default_rng(config.random_seed)
 
-    num_samples = 100_000
+    num_trials = 100_000
 
-    rayleigh_samples = sample_rayleigh_power(
-        rng=rng,
-        size=num_samples,
+    # Uniform probabilistic jammer
+    q = np.ones(config.num_channels) / config.num_channels
+
+    probabilistic_jammer = ProbabilisticJammer(
+        power_watt=config.jammer_power_watt,
+        channel_probabilities=q,
     )
 
-    dyadic_samples = sample_dyadic_backscatter_power(
-        rng=rng,
-        size=num_samples,
+    selected_channel = 0
+    probabilistic_jam_count = 0
+    probabilistic_interference_sum = 0.0
+
+    for _ in range(num_trials):
+        interference, was_jammed, jammer_channel = (
+            probabilistic_jammer.generate_interference(
+                rng=rng,
+                selected_channel=selected_channel,
+            )
+        )
+
+        if was_jammed:
+            probabilistic_jam_count += 1
+            probabilistic_interference_sum += interference
+
+    probabilistic_hit_rate = (
+        probabilistic_jam_count / num_trials
     )
 
-    print("=== Configuration ===")
-    print(f"Channels: {config.num_channels}")
-    print(f"Bandwidth: {config.bandwidth_hz / 1e3:.0f} kHz")
-    print(f"Noise power: {config.noise_power_watt:.3e} W")
-    print(f"Jammer power: {config.jammer_power_watt:.3e} W")
-
-    print("\n=== Channel validation ===")
+    print("=== Probabilistic jammer ===")
     print(
-        "Mean Rayleigh power |h|^2:",
-        f"{np.mean(rayleigh_samples):.4f}",
+        "Expected hit probability:",
+        f"{1 / config.num_channels:.4f}",
     )
     print(
-        "Mean dyadic power |h_st|^2|h_tr|^2:",
-        f"{np.mean(dyadic_samples):.4f}",
+        "Simulated hit probability:",
+        f"{probabilistic_hit_rate:.4f}",
     )
 
-    example_path_loss = path_loss(
-        distance_m=5.0,
-        path_loss_exponent=2.7,
+    if probabilistic_jam_count > 0:
+        print(
+            "Mean interference when jammed:",
+            f"{probabilistic_interference_sum / probabilistic_jam_count:.4e} W",
+        )
+
+    print()
+
+    # Reactive jammer
+    detection_probability = 0.7
+
+    reactive_jammer = ReactiveJammer(
+        power_watt=config.jammer_power_watt,
+        detection_probability=detection_probability,
     )
 
+    reactive_jam_count = 0
+    reactive_interference_sum = 0.0
+
+    for _ in range(num_trials):
+        interference, was_jammed = (
+            reactive_jammer.generate_interference(rng)
+        )
+
+        if was_jammed:
+            reactive_jam_count += 1
+            reactive_interference_sum += interference
+
+    reactive_hit_rate = reactive_jam_count / num_trials
+
+    print("=== Reactive jammer ===")
     print(
-        "Example path loss at 5 m:",
-        f"{example_path_loss:.6e}",
+        "Expected detection probability:",
+        f"{detection_probability:.4f}",
     )
+    print(
+        "Simulated detection probability:",
+        f"{reactive_hit_rate:.4f}",
+    )
+
+    if reactive_jam_count > 0:
+        print(
+            "Mean interference when jammed:",
+            f"{reactive_interference_sum / reactive_jam_count:.4e} W",
+        )
 
 
 if __name__ == "__main__":
